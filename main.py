@@ -1,9 +1,16 @@
 import os
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from tkinter import ttk
 import subprocess
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import argparse
+import time
 
+parser = argparse.ArgumentParser(description='GMD converter')
+parser.add_argument('debug', nargs='?', default=False, help='Enable debug mode (pass "debug" to enable).')
+args = parser.parse_args()
+
+
+debug = args.debug == 'debug'  
 def create_bat_file(command, output_file):
     with open(output_file, 'w') as bat_file:
         bat_file.write(f'@echo off\n')
@@ -11,105 +18,106 @@ def create_bat_file(command, output_file):
 
 def run_bat_file(output_file):
     subprocess.run([output_file], creationflags=subprocess.CREATE_NO_WINDOW, shell=True)
-    os.remove(output_file)
+    if not debug:
+        os.remove(output_file)
+    time.sleep(0.5)
 
-def extract_files(file_list):
-    if not file_list:
+def show_progress_bar(total_files):
+    progress_window = tk.Toplevel()
+    progress_window.title("Progress")
+    progress_window.geometry("600x600")
+
+    progress_bar = ttk.Progressbar(progress_window, orient="horizontal", length=250, mode="determinate")
+    progress_bar.pack(pady=20)
+
+    progress_label = tk.Label(progress_window, text="Processing files...")
+    progress_label.pack()
+
+    progress_bar["maximum"] = total_files
+
+    return progress_window, progress_bar
+
+def extract_files():
+    file_paths = file_path_extract.get().split(',')
+    if not file_paths or all(path.strip() == '' for path in file_paths):
+        messagebox.showwarning('Warning', 'Please select at least one GMD file.')
         return
-    try:
-        if len(file_list) == 1:
-            input_file = file_list[0]
-            command = f'gmd -e {input_file}'
-            output_file = f'extract_{os.path.splitext(input_file)[0]}.bat'
-            create_bat_file(command, output_file)
-            run_bat_file(output_file)
-            messagebox.showinfo("Success", f"Extracted: {input_file}")
-        else:
-            input_files = ' '.join(file_list)
-            command = f'gmd -e {input_files}'
-            output_file = 'extract_multiple.bat'
-            create_bat_file(command, output_file)
-            run_bat_file(output_file)
-            messagebox.showinfo("Success", f"Extracted: {len(file_list)} files.")
-    except Exception as e:
-        messagebox.showerror("Error", f"Error during extraction: {e}")
 
-def insert_files(file_list):
-    if not file_list:
+    progress_window, progress_bar = show_progress_bar(len(file_paths))
+    progress_window.update_idletasks()  
+
+    for file_path in file_paths:
+        file_path = file_path.strip()
+        command = f'gmd -e "{file_path}"'
+        output_file = f'extract_{os.path.splitext(os.path.basename(file_path))[0]}.bat'
+        create_bat_file(command, output_file)
+        run_bat_file(output_file)
+        progress_bar["value"] += 1  
+
+    progress_window.destroy()
+    messagebox.showinfo('Completed', 'Extraction completed successfully!')
+
+def insert_files():
+    file_paths = file_path_insert.get().split(',')
+    if not file_paths or all(path.strip() == '' for path in file_paths):
+        messagebox.showwarning('Warning', 'Please select at least one TXT file.')
         return
-    try:
-        if len(file_list) == 1:
-            input_file = file_list[0]
-            command = f'gmd -i -header=%s {input_file}'
-            output_file = f'insert_{os.path.splitext(input_file)[0]}.bat'
-            create_bat_file(command, output_file)
-            run_bat_file(output_file)
-            messagebox.showinfo("Success", f"Inserted: {input_file}")
-        else:
-            input_files = ' '.join(file_list)
-            command = f'gmd -i -header=%s {input_files}'
-            output_file = 'insert_multiple.bat'
-            create_bat_file(command, output_file)
-            run_bat_file(output_file)
-            messagebox.showinfo("Success", f"Inserted: {len(file_list)} files.")
-    except Exception as e:
-        messagebox.showerror("Error", f"Error during insertion: {e}")
 
-def browse_files(entry):
-    filenames = filedialog.askopenfilenames(title="Select Files")
-    entry.delete(0, tk.END)
-    entry.insert(0, ', '.join(filenames))
+    progress_window, progress_bar = show_progress_bar(len(file_paths))
+    progress_window.update_idletasks() 
 
-def extract_button_clicked(entry):
-    files = entry.get().split(', ')
-    extract_files(files)
+    for file_path in file_paths:
+        file_path = file_path.strip()
+        command = f'gmd -i -header=%s "{file_path}"'
+        output_file = f'insert_{os.path.splitext(os.path.basename(file_path))[0]}.bat'
+        create_bat_file(command, output_file)
+        run_bat_file(output_file)
+        progress_bar["value"] += 1  
 
-def insert_button_clicked(entry):
-    files = entry.get().split(', ')
-    insert_files(files)
+    progress_window.destroy()
+    messagebox.showinfo('Completed', 'Insertion completed successfully!')
+
+def choose_extract_files():
+    files = filedialog.askopenfilenames(title='Select GMD Files', filetypes=[('GMD Files', '*.gmd')])
+    if files:
+        file_path_extract.set(', '.join(files))  
+
+def choose_insert_files():
+    files = filedialog.askopenfilenames(title='Select TXT Files', filetypes=[('Text Files', '*.txt')])
+    if files:
+        file_path_insert.set(', '.join(files)) 
 
 
 root = tk.Tk()
-root.title("GMD Tool GUI (only for GS5 from 3DS)")
+root.title('GMD converter')
 
 
-tab_control = ttk.Notebook(root)
+file_path_extract = tk.StringVar()
+file_path_insert = tk.StringVar()
 
 
-extract_tab = ttk.Frame(tab_control)
-tab_control.add(extract_tab, text='Extract')
-
-
-insert_tab = ttk.Frame(tab_control)
-tab_control.add(insert_tab, text='Insert')
-
-tab_control.pack(expand=1, fill='both')
-
-
-extract_label = tk.Label(extract_tab, text="Select files to extract:")
-extract_label.pack(pady=10)
-
-extract_file_entry = tk.Entry(extract_tab, width=50)
-extract_file_entry.pack(pady=10)
-
-extract_browse_button = tk.Button(extract_tab, text="Browse", command=lambda: browse_files(extract_file_entry))
-extract_browse_button.pack(pady=5)
-
-extract_button = tk.Button(extract_tab, text="Extract", command=lambda: extract_button_clicked(extract_file_entry))
+extract_button = tk.Button(root, text='Choose GMD Files', command=choose_extract_files)
 extract_button.pack(pady=5)
 
 
-insert_label = tk.Label(insert_tab, text="Select files to insert:")
-insert_label.pack(pady=10)
+manual_input_extract = tk.Entry(root, textvariable=file_path_extract, width=50)
+manual_input_extract.pack(pady=5)
 
-insert_file_entry = tk.Entry(insert_tab, width=50)
-insert_file_entry.pack(pady=10)
 
-insert_browse_button = tk.Button(insert_tab, text="Browse", command=lambda: browse_files(insert_file_entry))
-insert_browse_button.pack(pady=5)
+extract_execute_button = tk.Button(root, text='Extract from GMD', command=extract_files)
+extract_execute_button.pack(pady=5)
 
-insert_button = tk.Button(insert_tab, text="Insert", command=lambda: insert_button_clicked(insert_file_entry))
+
+insert_button = tk.Button(root, text='Choose TXT Files', command=choose_insert_files)
 insert_button.pack(pady=5)
+
+
+manual_input_insert = tk.Entry(root, textvariable=file_path_insert, width=50)
+manual_input_insert.pack(pady=5)
+
+
+insert_execute_button = tk.Button(root, text='Insert into GMD', command=insert_files)
+insert_execute_button.pack(pady=5)
 
 
 root.mainloop()
